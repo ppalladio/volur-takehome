@@ -1,4 +1,3 @@
-// BlockNode.tsx
 'use client';
 
 import { Button, Checkbox, Input } from '@/components';
@@ -6,7 +5,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { useEditor } from '@/hooks';
 import { Block, Path } from '@/lib/editor/types';
 import { FileText, GripVertical, MoreVertical } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useDrag, useDrop } from 'react-dnd';
 import BlockList from './BlockList';
 
@@ -28,14 +27,62 @@ type DragItem = {
 type DropPosition = 'before' | 'after' | 'child';
 
 export default function BlockNode({ block, path, index, parentPath }: BlockNodeProps) {
-    const { updateContent, toggleTodo, deleteBlock, insertBlock, moveBlock } = useEditor();
-    const [isEditing, setIsEditing] = useState(block.autoFocus || false);
+    const { updateContent, toggleTodo, deleteBlock, insertBlock, moveBlock, cursorPosition, setCursorPosition } = useEditor();
+    const [isEditing, setIsEditing] = useState(false);
+    const [localContent, setLocalContent] = useState(block.content);
     const [dropPosition, setDropPosition] = useState<DropPosition | null>(null);
     const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
     const elementRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    const hasRestoredRef = useRef(false);
 
     const hasChildren = block.children && block.children.length > 0;
+
+    // Auto-focus and restore cursor on mount if this block was being edited
+    useEffect(() => {
+        if (hasRestoredRef.current) return;
+
+        const shouldRestore = cursorPosition && cursorPosition.blockId === block.id;
+        const shouldAutoFocus = block.autoFocus;
+
+        if (shouldAutoFocus || shouldRestore) {
+            setIsEditing(true);
+            setLocalContent(block.content); // Set initial content
+            hasRestoredRef.current = true;
+
+            // Use requestAnimationFrame to ensure the input is rendered
+            requestAnimationFrame(() => {
+                if (inputRef.current) {
+                    inputRef.current.focus();
+
+                    if (shouldRestore) {
+                        // Restore cursor position
+                        inputRef.current.setSelectionRange(cursorPosition.selectionStart, cursorPosition.selectionEnd);
+                    }
+                }
+            });
+        }
+    }, [block.autoFocus, block.id, block.content, cursorPosition]);
+
+    // Update local content when block content changes from external source (e.g., undo/redo)
+    // but only when not actively editing
+    useEffect(() => {
+        if (!isEditing) {
+            setLocalContent(block.content);
+        }
+    }, [block.content, isEditing]);
+
+    // Save cursor position when selection changes
+    const handleSelectionChange = (e: React.SyntheticEvent<HTMLInputElement>) => {
+        if (!hasRestoredRef.current) return; // Don't save during initial restoration
+
+        const input = e.currentTarget;
+        setCursorPosition({
+            blockId: block.id,
+            selectionStart: input.selectionStart ?? 0,
+            selectionEnd: input.selectionEnd ?? 0,
+        });
+    };
 
     // Drag and drop
     const [{ isDragging }, drag, preview] = useDrag({
@@ -55,9 +102,7 @@ export default function BlockNode({ block, path, index, parentPath }: BlockNodeP
     const [{ isOver, canDrop }, drop] = useDrop({
         accept: 'BLOCK',
         canDrop: (item: DragItem) => {
-            // Can't drop on itself
             if (item.blockId === block.id) return false;
-            // Can't drop parent into its own child
             if (path.length > item.path.length) {
                 const isDescendant = item.path.every((p, i) => p === path[i]);
                 if (isDescendant) return false;
@@ -75,7 +120,6 @@ export default function BlockNode({ block, path, index, parentPath }: BlockNodeP
             const hoverClientY = clientOffset.y - hoverBoundingRect.top;
             const hoverHeight = hoverBoundingRect.height;
 
-            // Determine drop position based on mouse position
             if (hoverClientY < hoverHeight * 0.25) {
                 setDropPosition('before');
             } else if (hoverClientY > hoverHeight * 0.75) {
@@ -91,20 +135,16 @@ export default function BlockNode({ block, path, index, parentPath }: BlockNodeP
             let toIndex: number;
 
             if (dropPosition === 'before') {
-                // Insert before this block (as sibling)
                 toParentPath = parentPath;
                 toIndex = index;
             } else if (dropPosition === 'after') {
-                // Insert after this block (as sibling)
                 toParentPath = parentPath;
                 toIndex = index + 1;
             } else {
-                // Insert as child (append to children)
                 toParentPath = path;
                 toIndex = block.children?.length ?? 0;
             }
 
-            // Only move if position actually changed
             if (JSON.stringify(item.parentPath) !== JSON.stringify(toParentPath) || item.index !== toIndex) {
                 moveBlock(item.parentPath, item.index, toParentPath, toIndex);
             }
@@ -117,7 +157,6 @@ export default function BlockNode({ block, path, index, parentPath }: BlockNodeP
         }),
     });
 
-    // Combine drag and drop refs using callback ref
     const setRefs = (element: HTMLDivElement | null) => {
         elementRef.current = element;
         drag(element);
@@ -126,6 +165,10 @@ export default function BlockNode({ block, path, index, parentPath }: BlockNodeP
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newValue = e.target.value;
+        setLocalContent(newValue);
+
+        // Update cursor position
+        handleSelectionChange(e);
 
         if (debounceTimerRef.current) {
             clearTimeout(debounceTimerRef.current);
@@ -143,12 +186,15 @@ export default function BlockNode({ block, path, index, parentPath }: BlockNodeP
                 clearTimeout(debounceTimerRef.current);
             }
             updateContent(path, e.currentTarget.value);
+            setCursorPosition(null);
             setIsEditing(false);
         }
         if (e.key === 'Escape') {
             if (debounceTimerRef.current) {
                 clearTimeout(debounceTimerRef.current);
             }
+            setLocalContent(block.content);
+            setCursorPosition(null);
             setIsEditing(false);
         }
     };
@@ -161,16 +207,18 @@ export default function BlockNode({ block, path, index, parentPath }: BlockNodeP
         if (currentValue !== block.content) {
             updateContent(path, currentValue);
         }
+        setCursorPosition(null);
         setIsEditing(false);
     };
 
     const handleStartEdit = () => {
         setIsEditing(true);
+        setLocalContent(block.content); // Ensure we start with current content
+        hasRestoredRef.current = true;
     };
 
     const opacity = isDragging ? 0.4 : 1;
 
-    // Visual feedback for drop position
     const getDropIndicatorClasses = () => {
         if (!isOver || !canDrop) return '';
 
@@ -186,12 +234,10 @@ export default function BlockNode({ block, path, index, parentPath }: BlockNodeP
     return (
         <div ref={setRefs} style={{ opacity }} className={`group ${getDropIndicatorClasses()}`}>
             <div className="flex items-center gap-2 p-2 rounded-md hover:bg-accent/50 transition-colors">
-                {/* Drag handle */}
                 <div className="opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing mt-1 shrink-0">
                     <GripVertical className="w-4 h-4 text-muted-foreground" />
                 </div>
 
-                {/* Type indicator or checkbox */}
                 <div className="flex items-center gap-2 mt-1 shrink-0">
                     {block.type === 'todo' ? (
                         <Checkbox checked={block.done ?? false} onCheckedChange={() => toggleTodo(path)} />
@@ -200,19 +246,19 @@ export default function BlockNode({ block, path, index, parentPath }: BlockNodeP
                     )}
                 </div>
 
-                {/* Content */}
                 <div className="flex-1 min-w-0">
                     {isEditing ? (
                         <Input
                             ref={inputRef}
                             type="text"
-                            defaultValue={block.content}
+                            value={localContent}
                             onChange={handleChange}
                             onBlur={handleBlur}
                             onKeyDown={handleKeyDown}
+                            onSelect={handleSelectionChange}
+                            onClick={handleSelectionChange}
+                            onKeyUp={handleSelectionChange}
                             className="h-8"
-                            autoFocus
-                            placeholder="Enter your text here"
                         />
                     ) : (
                         <Button
@@ -228,7 +274,6 @@ export default function BlockNode({ block, path, index, parentPath }: BlockNodeP
                     )}
                 </div>
 
-                {/* Actions dropdown */}
                 <div className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -252,7 +297,6 @@ export default function BlockNode({ block, path, index, parentPath }: BlockNodeP
                 </div>
             </div>
 
-            {/* Children - moved outside the main flex container */}
             {hasChildren && (
                 <div className="ml-6 mt-2 border-l-2 border-border pl-4">
                     <BlockList blocks={block.children!} parentPath={path} />
