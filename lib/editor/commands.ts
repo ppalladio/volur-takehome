@@ -1,5 +1,5 @@
-import { BlockArray, BlockType, Command, Path } from './types';
-import { createBlock, getBlockAtPath, getParentArray } from './utils';
+import { BlockArray, BlockType, Command, Path } from '@/lib/editor/types';
+import { createBlock, getBlockAtPath, getParentArray } from '@/lib/editor/utils';
 
 /**
  * Update block content

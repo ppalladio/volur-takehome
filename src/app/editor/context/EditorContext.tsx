@@ -41,6 +41,21 @@ export function EditorProvider({ children, initialDoc }: EditorProviderProps) {
                 return;
             }
 
+            console.group('⚡ Execute Command');
+            console.log('Forward patch:', command.forward);
+            console.log('Inverse patch:', command.inverse);
+
+            // Calculate patch sizes
+            const forwardSize = JSON.stringify(command.forward).length;
+            const inverseSize = JSON.stringify(command.inverse).length;
+            const docSize = JSON.stringify(doc).length;
+
+            console.log('📊 Size Analysis:');
+            console.log(`  Forward patch: ${forwardSize} bytes`);
+            console.log(`  Inverse patch: ${inverseSize} bytes`);
+            console.log(`  Full document: ${docSize} bytes`);
+            console.log(`  Efficiency: ${((forwardSize / docSize) * 100).toFixed(2)}% of doc size`);
+
             const newDoc = applyPatch(doc, command.forward);
             setDoc(newDoc);
 
@@ -49,6 +64,9 @@ export function EditorProvider({ children, initialDoc }: EditorProviderProps) {
             newHistory.push(command);
             setHistory(newHistory);
             setHistoryIndex(newHistory.length - 1);
+
+            console.log(`📚 History: ${newHistory.length} commands, at index ${newHistory.length - 1}`);
+            console.groupEnd();
         },
         [doc, history, historyIndex],
     );
@@ -57,25 +75,38 @@ export function EditorProvider({ children, initialDoc }: EditorProviderProps) {
     const undo = useCallback(() => {
         if (historyIndex < 0) return;
 
+        console.group('⏪ UNDO');
         const command = history[historyIndex];
+        console.log('Applying inverse patch:', command.inverse);
+
         const newDoc = applyPatch(doc, command.inverse);
         setDoc(newDoc);
         setHistoryIndex(historyIndex - 1);
+
+        console.log(`📚 History position: ${historyIndex} → ${historyIndex - 1}`);
+        console.groupEnd();
     }, [doc, history, historyIndex]);
 
     // Redo
     const redo = useCallback(() => {
         if (historyIndex >= history.length - 1) return;
 
+        console.group('⏩ REDO');
         const command = history[historyIndex + 1];
+        console.log('Applying forward patch:', command.forward);
+
         const newDoc = applyPatch(doc, command.forward);
         setDoc(newDoc);
         setHistoryIndex(historyIndex + 1);
+
+        console.log(`📚 History position: ${historyIndex} → ${historyIndex + 1}`);
+        console.groupEnd();
     }, [doc, history, historyIndex]);
 
     // Action wrappers that create commands and execute them
     const updateContent = useCallback(
         (path: Path, content: string) => {
+            console.log('🎯 Action: Update Content', { path, content });
             const command = updateContentCommand(doc, path, content);
             execute(command);
         },
@@ -84,6 +115,7 @@ export function EditorProvider({ children, initialDoc }: EditorProviderProps) {
 
     const toggleTodo = useCallback(
         (path: Path) => {
+            console.log('🎯 Action: Toggle Todo', { path });
             const command = toggleTodoCommand(doc, path);
             execute(command);
         },
@@ -92,6 +124,7 @@ export function EditorProvider({ children, initialDoc }: EditorProviderProps) {
 
     const insertBlock = useCallback(
         (parentPath: Path | null, index: number, type: BlockType) => {
+            console.log('🎯 Action: Insert Block', { parentPath, index, type });
             const command = insertBlockCommand(parentPath, index, type);
             execute(command);
         },
@@ -100,6 +133,7 @@ export function EditorProvider({ children, initialDoc }: EditorProviderProps) {
 
     const deleteBlock = useCallback(
         (parentPath: Path | null, index: number) => {
+            console.log('🎯 Action: Delete Block', { parentPath, index });
             const command = deleteBlockCommand(doc, parentPath, index);
             execute(command);
         },
@@ -108,6 +142,7 @@ export function EditorProvider({ children, initialDoc }: EditorProviderProps) {
 
     const moveBlock = useCallback(
         (fromParentPath: Path | null, fromIndex: number, toParentPath: Path | null, toIndex: number) => {
+            console.log('🎯 Action: Move Block', { fromParentPath, fromIndex, toParentPath, toIndex });
             const command = moveBlockCommand(fromParentPath, fromIndex, toParentPath, toIndex);
             execute(command);
         },
