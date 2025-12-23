@@ -65,4 +65,9 @@ export type Patch = {
 export type Command = {
     forward: Patch;
     inverse: Patch;
-};
+}; 
+export type CursorPosition = {
+    blockId: string;
+    selectionStart: number;
+    selectionEnd: number;
+} | null;

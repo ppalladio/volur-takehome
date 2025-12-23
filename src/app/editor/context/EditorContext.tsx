@@ -2,8 +2,9 @@
 
 import { deleteBlockCommand, insertBlockCommand, moveBlockCommand, toggleTodoCommand, updateContentCommand } from '@/lib/editor/commands';
 import { applyPatch } from '@/lib/editor/patches';
-import { BlockArray, BlockType, Command, HistoryNode, Path } from '@/lib/editor/types';
-import { createContext, ReactNode, useCallback, useMemo, useState } from 'react';
+import { loadEditorState, saveEditorState } from '@/lib/editor/persistence';
+import { BlockArray, BlockType, Command, CursorPosition, HistoryNode, Path } from '@/lib/editor/types';
+import { createContext, ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 
 export type RedoBranch = {
     node: HistoryNode;
@@ -16,6 +17,7 @@ export type EditorContextType = {
     canUndo: boolean;
     canRedo: boolean;
     redoBranches: RedoBranch[];
+    cursorPosition: CursorPosition;
 
     // Actions
     updateContent: (path: Path, content: string) => void;
@@ -23,6 +25,7 @@ export type EditorContextType = {
     insertBlock: (parentPath: Path | null, index: number, type: BlockType) => void;
     deleteBlock: (parentPath: Path | null, index: number) => void;
     moveBlock: (fromParentPath: Path | null, fromIndex: number, toParentPath: Path | null, toIndex: number) => void;
+    setCursorPosition: (cursor: CursorPosition) => void;
     undo: () => void;
     redo: (nodeIndex?: number) => void;
 };
@@ -35,9 +38,46 @@ type EditorProviderProps = Readonly<{
 }>;
 
 export function EditorProvider({ children, initialDoc }: EditorProviderProps) {
-    const [doc, setDoc] = useState<BlockArray>(initialDoc);
-    const [historyNodes, setHistoryNodes] = useState<HistoryNode[]>([]);
-    const [currentIndex, setCurrentIndex] = useState<number>(-1);
+    // Initialize state from localStorage or use initialDoc
+    const [isLoaded, setIsLoaded] = useState(false);
+    const [doc, setDoc] = useState<BlockArray>(() => {
+        if (globalThis.window === undefined) return initialDoc;
+        const persisted = loadEditorState();
+        return persisted?.doc ?? initialDoc;
+    });
+    const [historyNodes, setHistoryNodes] = useState<HistoryNode[]>(() => {
+        if (globalThis.window === undefined) return [];
+        const persisted = loadEditorState();
+        return persisted?.historyNodes ?? [];
+    });
+    const [currentIndex, setCurrentIndex] = useState<number>(() => {
+        if (globalThis.window === undefined) return -1;
+        const persisted = loadEditorState();
+        return persisted?.currentIndex ?? -1;
+    });
+    const [cursorPosition, setCursorPosition] = useState<CursorPosition>(() => {
+        if (globalThis.window === undefined) return null;
+        const persisted = loadEditorState();
+        return persisted?.cursor ?? null;
+    });
+
+    // Mark as loaded after initial mount
+    useEffect(() => {
+        setTimeout(() => {
+            setIsLoaded(true);
+        }, 0);
+    }, []);
+
+    // Persist state whenever it changes (debounced)
+    useEffect(() => {
+        if (!isLoaded) return; // Don't save on initial load
+
+        const timeoutId = setTimeout(() => {
+            saveEditorState(doc, historyNodes, currentIndex, cursorPosition);
+        }, 500); // Debounce saves by 500ms
+
+        return () => clearTimeout(timeoutId);
+    }, [doc, historyNodes, currentIndex, cursorPosition, isLoaded]);
 
     // Execute a command (adds to history tree)
     const execute = useCallback(
@@ -57,7 +97,7 @@ export function EditorProvider({ children, initialDoc }: EditorProviderProps) {
             // Create new history node
             const newNode: HistoryNode = {
                 command,
-                parentIndex: currentIndex >= 0 ? currentIndex : null, // FIX: Use null instead of -1
+                parentIndex: currentIndex >= 0 ? currentIndex : null,
                 branches: [],
                 timestamp: Date.now(),
             };
@@ -106,28 +146,16 @@ export function EditorProvider({ children, initialDoc }: EditorProviderProps) {
             if (currentNode) {
                 // We're at a specific node - show its branches
                 branchIndices = currentNode.branches;
-                console.log('🔍 Redo from node', currentIndex, 'branches:', branchIndices);
             } else {
                 // We're at the initial state (before any history) - show all root nodes
                 branchIndices = historyNodes.map((node, idx) => (node.parentIndex === null ? idx : -1)).filter((idx) => idx !== -1);
-                console.log('🔍 Redo from initial state, root nodes:', branchIndices);
-                console.log(
-                    '🔍 All history nodes:',
-                    historyNodes.map((n, i) => ({ idx: i, parentIndex: n.parentIndex })),
-                );
             }
 
-            if (branchIndices.length === 0) {
-                console.log('❌ No branches available');
-                return;
-            }
+            if (branchIndices.length === 0) return;
 
             // If nodeIndex provided, use it; otherwise use last branch (most recent)
             const targetIndex = nodeIndex ?? branchIndices.at(-1) ?? -1;
-            if (!historyNodes[targetIndex]) {
-                console.log('❌ Target node not found:', targetIndex);
-                return;
-            }
+            if (!historyNodes[targetIndex]) return;
 
             console.group('⏩ REDO');
             const node = historyNodes[targetIndex];
@@ -203,10 +231,6 @@ export function EditorProvider({ children, initialDoc }: EditorProviderProps) {
         redoBranchIndices = historyNodes.map((node, idx) => (node.parentIndex === null ? idx : -1)).filter((idx) => idx !== -1);
     }
 
-    console.log('🔍 Current index:', currentIndex);
-    console.log('🔍 History nodes count:', historyNodes.length);
-    console.log('🔍 Redo branch indices:', redoBranchIndices);
-
     const redoBranches: RedoBranch[] = redoBranchIndices
         .map((nodeIndex) => ({
             node: historyNodes[nodeIndex],
@@ -216,23 +240,37 @@ export function EditorProvider({ children, initialDoc }: EditorProviderProps) {
 
     const canRedo = redoBranches.length > 0;
 
-    console.log('🔍 Can redo:', canRedo, 'Branches:', redoBranches.length);
-
-    const value = useMemo(
+    const value: EditorContextType = useMemo(
         () => ({
             doc,
             canUndo,
             canRedo,
             redoBranches,
+            cursorPosition,
             updateContent,
             toggleTodo,
             insertBlock,
             deleteBlock,
             moveBlock,
+            setCursorPosition,
             undo,
             redo,
         }),
-        [doc, canUndo, canRedo, redoBranches, updateContent, toggleTodo, insertBlock, deleteBlock, moveBlock, undo, redo],
+        [
+            doc,
+            canUndo,
+            canRedo,
+            redoBranches,
+            cursorPosition,
+            updateContent,
+            toggleTodo,
+            insertBlock,
+            deleteBlock,
+            moveBlock,
+            setCursorPosition,
+            undo,
+            redo,
+        ],
     );
 
     return <EditorContext.Provider value={value}>{children}</EditorContext.Provider>;
