@@ -1,9 +1,6 @@
-import { BlockArray, BlockType, Command, Path } from '@/lib/editor/types';
-import { createBlock, getBlockAtPath, getParentArray } from '@/lib/editor/utils';
+import { BlockArray, BlockType, Command, Path } from './types';
+import { createBlock, getBlockAtPath, getParentArray } from './utils';
 
-/**
- * Update block content
- */
 export function updateContentCommand(doc: BlockArray, path: Path, newContent: string): Command | null {
     const block = getBlockAtPath(doc, path);
     if (!block) return null;
@@ -34,16 +31,12 @@ export function updateContentCommand(doc: BlockArray, path: Path, newContent: st
     };
 }
 
-/**
- * Toggle todo done state
- */
 export function toggleTodoCommand(doc: BlockArray, path: Path): Command | null {
     const block = getBlockAtPath(doc, path);
-    if (!block || block.type !== 'todo') return null;
+    if (block?.type !== 'todo') return null;
 
     const currentDone = block.done ?? false;
     const newDone = !currentDone;
-
     return {
         forward: {
             ops: [
@@ -51,8 +44,8 @@ export function toggleTodoCommand(doc: BlockArray, path: Path): Command | null {
                     type: 'update',
                     path,
                     field: 'done',
-                    value: String(newDone),
-                    oldValue: String(currentDone),
+                    value: newDone,
+                    oldValue: currentDone,
                 },
             ],
         },
@@ -62,17 +55,14 @@ export function toggleTodoCommand(doc: BlockArray, path: Path): Command | null {
                     type: 'update',
                     path,
                     field: 'done',
-                    value: String(currentDone),
-                    oldValue: String(newDone),
+                    value: currentDone,
+                    oldValue: newDone,
                 },
             ],
         },
     };
 }
 
-/**
- * Insert new block as sibling
- */
 export function insertBlockCommand(parentPath: Path | null, index: number, type: BlockType): Command {
     const newBlock = createBlock(type);
 
@@ -92,13 +82,9 @@ export function insertBlockCommand(parentPath: Path | null, index: number, type:
         },
     };
 }
-
-/**
- * Delete block and its subtree
- */
 export function deleteBlockCommand(doc: BlockArray, parentPath: Path | null, index: number): Command | null {
     const parent = getParentArray(doc, parentPath);
-    if (!parent || !parent[index]) return null;
+    if (!parent?.[index]) return null;
 
     const deletedBlock = parent[index];
 
@@ -125,10 +111,6 @@ export function deleteBlockCommand(doc: BlockArray, parentPath: Path | null, ind
         },
     };
 }
-
-/**
- * Move block to new position
- */
 export function moveBlockCommand(fromParentPath: Path | null, fromIndex: number, toParentPath: Path | null, toIndex: number): Command {
     return {
         forward: {

@@ -9,8 +9,6 @@ export function useKeyboardShortcuts() {
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             // Check if we're in an input/textarea to avoid conflicts
-            const target = e.target as HTMLElement;
-            const isInInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
 
             // Undo: Ctrl+Z (Windows/Linux) or Cmd+Z (Mac)
             if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
@@ -30,10 +28,10 @@ export function useKeyboardShortcuts() {
             }
         };
 
-        window.addEventListener('keydown', handleKeyDown);
+        globalThis.addEventListener('keydown', handleKeyDown);
 
         return () => {
-            window.removeEventListener('keydown', handleKeyDown);
+            globalThis.removeEventListener('keydown', handleKeyDown);
         };
     }, [undo, redo, canUndo, canRedo]);
 }
