@@ -1,15 +1,28 @@
 export type BlockType = 'text' | 'todo';
 
-export type Block = {
+export type BaseBlock = {
     id: string;
     type: BlockType;
     content: string;
     done?: boolean;
     children?: Block[];
 };
-
+export type Block = BaseBlock & {
+    autoFocus?: boolean;
+};
 export type BlockArray = Block[];
 
+export type HistoryNode = {
+    command: Command;
+    parentIndex: number | null;
+    branches: number[];
+    timestamp: number;
+};
+
+export type HistoryTree = {
+    nodes: HistoryNode[];
+    currentIndex: number;
+};
 export type Path = number[];
 export type PatchOp =
     | {

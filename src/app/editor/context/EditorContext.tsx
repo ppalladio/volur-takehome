@@ -2,14 +2,20 @@
 
 import { deleteBlockCommand, insertBlockCommand, moveBlockCommand, toggleTodoCommand, updateContentCommand } from '@/lib/editor/commands';
 import { applyPatch } from '@/lib/editor/patches';
-import { BlockArray, BlockType, Command, Path } from '@/lib/editor/types';
+import { BlockArray, BlockType, Command, HistoryNode, Path } from '@/lib/editor/types';
 import { createContext, ReactNode, useCallback, useMemo, useState } from 'react';
+
+export type RedoBranch = {
+    node: HistoryNode;
+    nodeIndex: number;
+};
 
 export type EditorContextType = {
     // State
     doc: BlockArray;
     canUndo: boolean;
     canRedo: boolean;
+    redoBranches: RedoBranch[];
 
     // Actions
     updateContent: (path: Path, content: string) => void;
@@ -18,22 +24,22 @@ export type EditorContextType = {
     deleteBlock: (parentPath: Path | null, index: number) => void;
     moveBlock: (fromParentPath: Path | null, fromIndex: number, toParentPath: Path | null, toIndex: number) => void;
     undo: () => void;
-    redo: () => void;
+    redo: (nodeIndex?: number) => void;
 };
 
 export const EditorContext = createContext<EditorContextType | undefined>(undefined);
 
-type EditorProviderProps = {
-    readonly children: ReactNode;
-    readonly initialDoc: BlockArray;
-};
+type EditorProviderProps = Readonly<{
+    children: ReactNode;
+    initialDoc: BlockArray;
+}>;
 
 export function EditorProvider({ children, initialDoc }: EditorProviderProps) {
     const [doc, setDoc] = useState<BlockArray>(initialDoc);
-    const [history, setHistory] = useState<Command[]>([]);
-    const [historyIndex, setHistoryIndex] = useState(-1);
+    const [historyNodes, setHistoryNodes] = useState<HistoryNode[]>([]);
+    const [currentIndex, setCurrentIndex] = useState<number>(-1);
 
-    // Execute a command (adds to history)
+    // Execute a command (adds to history tree)
     const execute = useCallback(
         (command: Command | null) => {
             if (!command) {
@@ -45,65 +51,99 @@ export function EditorProvider({ children, initialDoc }: EditorProviderProps) {
             console.log('Forward patch:', command.forward);
             console.log('Inverse patch:', command.inverse);
 
-            // Calculate patch sizes
-            const forwardSize = JSON.stringify(command.forward).length;
-            const inverseSize = JSON.stringify(command.inverse).length;
-            const docSize = JSON.stringify(doc).length;
-
-            console.log('📊 Size Analysis:');
-            console.log(`  Forward patch: ${forwardSize} bytes`);
-            console.log(`  Inverse patch: ${inverseSize} bytes`);
-            console.log(`  Full document: ${docSize} bytes`);
-            console.log(`  Efficiency: ${((forwardSize / docSize) * 100).toFixed(2)}% of doc size`);
-
             const newDoc = applyPatch(doc, command.forward);
             setDoc(newDoc);
 
-            // Clear redo history when new action is performed
-            const newHistory = history.slice(0, historyIndex + 1);
-            newHistory.push(command);
-            setHistory(newHistory);
-            setHistoryIndex(newHistory.length - 1);
+            // Create new history node
+            const newNode: HistoryNode = {
+                command,
+                parentIndex: currentIndex >= 0 ? currentIndex : null, // FIX: Use null instead of -1
+                branches: [],
+                timestamp: Date.now(),
+            };
 
-            console.log(`📚 History: ${newHistory.length} commands, at index ${newHistory.length - 1}`);
+            // If we have a parent, add this as a branch
+            const updatedNodes = [...historyNodes];
+            if (currentIndex >= 0) {
+                updatedNodes[currentIndex] = {
+                    ...updatedNodes[currentIndex],
+                    branches: [...updatedNodes[currentIndex].branches, updatedNodes.length],
+                };
+            }
+
+            updatedNodes.push(newNode);
+            setHistoryNodes(updatedNodes);
+            setCurrentIndex(updatedNodes.length - 1);
+
+            console.log(`📚 History: ${updatedNodes.length} nodes, at index ${updatedNodes.length - 1}`);
             console.groupEnd();
         },
-        [doc, history, historyIndex],
+        [doc, historyNodes, currentIndex],
     );
 
     // Undo
     const undo = useCallback(() => {
-        if (historyIndex < 0) return;
+        if (currentIndex < 0) return;
 
         console.group('⏪ UNDO');
-        const command = history[historyIndex];
-        console.log('Applying inverse patch:', command.inverse);
+        const node = historyNodes[currentIndex];
+        console.log('Applying inverse patch:', node.command.inverse);
 
-        const newDoc = applyPatch(doc, command.inverse);
+        const newDoc = applyPatch(doc, node.command.inverse);
         setDoc(newDoc);
-        setHistoryIndex(historyIndex - 1);
+        setCurrentIndex(node.parentIndex ?? -1);
 
-        console.log(`📚 History position: ${historyIndex} → ${historyIndex - 1}`);
+        console.log(`📚 History position: ${currentIndex} → ${node.parentIndex ?? -1}`);
         console.groupEnd();
-    }, [doc, history, historyIndex]);
+    }, [doc, historyNodes, currentIndex]);
 
-    // Redo
-    const redo = useCallback(() => {
-        if (historyIndex >= history.length - 1) return;
+    // Redo (with optional node index selection)
+    const redo = useCallback(
+        (nodeIndex?: number) => {
+            const currentNode = currentIndex >= 0 ? historyNodes[currentIndex] : null;
+            let branchIndices: number[];
 
-        console.group('⏩ REDO');
-        const command = history[historyIndex + 1];
-        console.log('Applying forward patch:', command.forward);
+            if (currentNode) {
+                // We're at a specific node - show its branches
+                branchIndices = currentNode.branches;
+                console.log('🔍 Redo from node', currentIndex, 'branches:', branchIndices);
+            } else {
+                // We're at the initial state (before any history) - show all root nodes
+                branchIndices = historyNodes.map((node, idx) => (node.parentIndex === null ? idx : -1)).filter((idx) => idx !== -1);
+                console.log('🔍 Redo from initial state, root nodes:', branchIndices);
+                console.log(
+                    '🔍 All history nodes:',
+                    historyNodes.map((n, i) => ({ idx: i, parentIndex: n.parentIndex })),
+                );
+            }
 
-        const newDoc = applyPatch(doc, command.forward);
-        setDoc(newDoc);
-        setHistoryIndex(historyIndex + 1);
+            if (branchIndices.length === 0) {
+                console.log('❌ No branches available');
+                return;
+            }
 
-        console.log(`📚 History position: ${historyIndex} → ${historyIndex + 1}`);
-        console.groupEnd();
-    }, [doc, history, historyIndex]);
+            // If nodeIndex provided, use it; otherwise use last branch (most recent)
+            const targetIndex = nodeIndex ?? branchIndices.at(-1) ?? -1;
+            if (!historyNodes[targetIndex]) {
+                console.log('❌ Target node not found:', targetIndex);
+                return;
+            }
 
-    // Action wrappers that create commands and execute them
+            console.group('⏩ REDO');
+            const node = historyNodes[targetIndex];
+            console.log('Applying forward patch:', node.command.forward);
+
+            const newDoc = applyPatch(doc, node.command.forward);
+            setDoc(newDoc);
+            setCurrentIndex(targetIndex);
+
+            console.log(`📚 History position: ${currentIndex} → ${targetIndex}`);
+            console.groupEnd();
+        },
+        [doc, historyNodes, currentIndex],
+    );
+
+    // Action wrappers
     const updateContent = useCallback(
         (path: Path, content: string) => {
             console.log('🎯 Action: Update Content', { path, content });
@@ -149,14 +189,41 @@ export function EditorProvider({ children, initialDoc }: EditorProviderProps) {
         [execute],
     );
 
-    const canUndo = historyIndex >= 0;
-    const canRedo = historyIndex < history.length - 1;
+    const canUndo = currentIndex >= 0;
+
+    // Get available redo branches with their indices
+    const currentNode = currentIndex >= 0 ? historyNodes[currentIndex] : null;
+    let redoBranchIndices: number[];
+
+    if (currentNode) {
+        // We're at a specific node - show its branches
+        redoBranchIndices = currentNode.branches;
+    } else {
+        // We're at the initial state (before any history) - show all root nodes
+        redoBranchIndices = historyNodes.map((node, idx) => (node.parentIndex === null ? idx : -1)).filter((idx) => idx !== -1);
+    }
+
+    console.log('🔍 Current index:', currentIndex);
+    console.log('🔍 History nodes count:', historyNodes.length);
+    console.log('🔍 Redo branch indices:', redoBranchIndices);
+
+    const redoBranches: RedoBranch[] = redoBranchIndices
+        .map((nodeIndex) => ({
+            node: historyNodes[nodeIndex],
+            nodeIndex,
+        }))
+        .filter((branch) => branch.node);
+
+    const canRedo = redoBranches.length > 0;
+
+    console.log('🔍 Can redo:', canRedo, 'Branches:', redoBranches.length);
 
     const value = useMemo(
         () => ({
             doc,
             canUndo,
             canRedo,
+            redoBranches,
             updateContent,
             toggleTodo,
             insertBlock,
@@ -165,7 +232,7 @@ export function EditorProvider({ children, initialDoc }: EditorProviderProps) {
             undo,
             redo,
         }),
-        [doc, canUndo, canRedo, updateContent, toggleTodo, insertBlock, deleteBlock, moveBlock, undo, redo],
+        [doc, canUndo, canRedo, redoBranches, updateContent, toggleTodo, insertBlock, deleteBlock, moveBlock, undo, redo],
     );
 
     return <EditorContext.Provider value={value}>{children}</EditorContext.Provider>;

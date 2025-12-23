@@ -3,10 +3,10 @@
 import { Block, Path } from '@/lib/editor/types';
 import BlockNode from './BlockNode';
 
-type BlockListProps = {
+type BlockListProps = Readonly<{
     blocks: Block[];
     parentPath: Path | null;
-};
+}>;
 
 export default function BlockList({ blocks, parentPath }: BlockListProps) {
     return (

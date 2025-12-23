@@ -63,8 +63,10 @@ export function toggleTodoCommand(doc: BlockArray, path: Path): Command | null {
     };
 }
 
+// commands.ts
 export function insertBlockCommand(parentPath: Path | null, index: number, type: BlockType): Command {
     const newBlock = createBlock(type);
+    newBlock.autoFocus = true; // Set autoFocus flag
 
     return {
         forward: {

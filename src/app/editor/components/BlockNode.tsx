@@ -1,16 +1,8 @@
+// BlockNode.tsx
 'use client';
 
-import {
-    Button,
-    Checkbox,
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-    Input,
-} from '@/components';
-
+import { Button, Checkbox, Input } from '@/components';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useEditor } from '@/hooks';
 import { Block, Path } from '@/lib/editor/types';
 import { FileText, GripVertical, MoreVertical } from 'lucide-react';
@@ -37,10 +29,11 @@ type DropPosition = 'before' | 'after' | 'child';
 
 export default function BlockNode({ block, path, index, parentPath }: BlockNodeProps) {
     const { updateContent, toggleTodo, deleteBlock, insertBlock, moveBlock } = useEditor();
-    const [isEditing, setIsEditing] = useState(false);
+    const [isEditing, setIsEditing] = useState(block.autoFocus || false);
     const [dropPosition, setDropPosition] = useState<DropPosition | null>(null);
     const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
     const elementRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
 
     const hasChildren = block.children && block.children.length > 0;
 
@@ -140,7 +133,7 @@ export default function BlockNode({ block, path, index, parentPath }: BlockNodeP
 
         debounceTimerRef.current = setTimeout(() => {
             updateContent(path, newValue);
-        }, 300);
+        }, 100);
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -177,6 +170,7 @@ export default function BlockNode({ block, path, index, parentPath }: BlockNodeP
 
     const opacity = isDragging ? 0.4 : 1;
 
+    // Visual feedback for drop position
     const getDropIndicatorClasses = () => {
         if (!isOver || !canDrop) return '';
 
@@ -198,7 +192,7 @@ export default function BlockNode({ block, path, index, parentPath }: BlockNodeP
                 </div>
 
                 {/* Type indicator or checkbox */}
-                <div className="flex items-center  gap-2 mt-1 shrink-0">
+                <div className="flex items-center gap-2 mt-1 shrink-0">
                     {block.type === 'todo' ? (
                         <Checkbox checked={block.done ?? false} onCheckedChange={() => toggleTodo(path)} />
                     ) : (
@@ -210,6 +204,7 @@ export default function BlockNode({ block, path, index, parentPath }: BlockNodeP
                 <div className="flex-1 min-w-0">
                     {isEditing ? (
                         <Input
+                            ref={inputRef}
                             type="text"
                             defaultValue={block.content}
                             onChange={handleChange}
@@ -217,6 +212,7 @@ export default function BlockNode({ block, path, index, parentPath }: BlockNodeP
                             onKeyDown={handleKeyDown}
                             className="h-8"
                             autoFocus
+                            placeholder="Enter your text here"
                         />
                     ) : (
                         <Button
@@ -256,6 +252,7 @@ export default function BlockNode({ block, path, index, parentPath }: BlockNodeP
                 </div>
             </div>
 
+            {/* Children - moved outside the main flex container */}
             {hasChildren && (
                 <div className="ml-6 mt-2 border-l-2 border-border pl-4">
                     <BlockList blocks={block.children!} parentPath={path} />
