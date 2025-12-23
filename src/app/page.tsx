@@ -1,9 +1,9 @@
-import Editor from '@/app/editor/components/Editor';
-import { EditorProvider } from '@/app/editor/context/EditorContext';
+'use client';
 import { BlockArray } from '@/lib/editor/types';
 import { createBlock } from '@/lib/editor/utils';
+import { EditorProvider } from './editor/context/EditorContext';
+import EditorLayout from './editor/layout';
 
-// Sample initial document
 const initialDoc: BlockArray = [
     createBlock('text', 'Welcome to Mini Notion'),
     {
@@ -17,20 +17,30 @@ const initialDoc: BlockArray = [
     },
     {
         ...createBlock('todo', 'Test all features'),
-        done: false,
+        done: true,
     },
     createBlock('text', 'Have fun! 🎉'),
 ];
 
+import { useEffect, useState } from 'react';
+
 export default function Home() {
+    const [isMounted, setIsMounted] = useState(false);
+    useEffect(() => {
+        setTimeout(() => {
+            setIsMounted(true);
+        }, 1000);
+    }, []);
+    if (!isMounted) return null;
     return (
         <main className="min-h-screen p-8 max-w-4xl mx-auto">
             <div className="mb-8">
                 <h1 className="text-4xl font-bold tracking-tight">Mini JSON Block Editor</h1>
                 <p className="text-muted-foreground mt-2">A Notion-lite editor with patch-based undo/redo</p>
             </div>
+
             <EditorProvider initialDoc={initialDoc}>
-                <Editor />
+                <EditorLayout />
             </EditorProvider>
         </main>
     );

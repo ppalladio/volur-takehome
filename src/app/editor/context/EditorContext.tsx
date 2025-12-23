@@ -3,7 +3,7 @@
 import { deleteBlockCommand, insertBlockCommand, moveBlockCommand, toggleTodoCommand, updateContentCommand } from '@/lib/editor/commands';
 import { applyPatch } from '@/lib/editor/patches';
 import { BlockArray, BlockType, Command, Path } from '@/lib/editor/types';
-import { createContext, ReactNode, useCallback, useState } from 'react';
+import { createContext, ReactNode, useCallback, useMemo, useState } from 'react';
 
 export type EditorContextType = {
     // State
@@ -24,8 +24,8 @@ export type EditorContextType = {
 export const EditorContext = createContext<EditorContextType | undefined>(undefined);
 
 type EditorProviderProps = {
-    children: ReactNode;
-    initialDoc: BlockArray;
+    readonly children: ReactNode;
+    readonly initialDoc: BlockArray;
 };
 
 export function EditorProvider({ children, initialDoc }: EditorProviderProps) {
@@ -152,18 +152,21 @@ export function EditorProvider({ children, initialDoc }: EditorProviderProps) {
     const canUndo = historyIndex >= 0;
     const canRedo = historyIndex < history.length - 1;
 
-    const value: EditorContextType = {
-        doc,
-        canUndo,
-        canRedo,
-        updateContent,
-        toggleTodo,
-        insertBlock,
-        deleteBlock,
-        moveBlock,
-        undo,
-        redo,
-    };
+    const value = useMemo(
+        () => ({
+            doc,
+            canUndo,
+            canRedo,
+            updateContent,
+            toggleTodo,
+            insertBlock,
+            deleteBlock,
+            moveBlock,
+            undo,
+            redo,
+        }),
+        [doc, canUndo, canRedo, updateContent, toggleTodo, insertBlock, deleteBlock, moveBlock, undo, redo],
+    );
 
     return <EditorContext.Provider value={value}>{children}</EditorContext.Provider>;
 }

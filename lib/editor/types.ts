@@ -11,14 +11,20 @@ export type Block = {
 export type BlockArray = Block[];
 
 export type Path = number[];
-
 export type PatchOp =
     | {
           type: 'update';
           path: Path;
-          field: keyof Block;
+          field: 'content';
           value: string;
           oldValue: string;
+      }
+    | {
+          type: 'update';
+          path: Path;
+          field: 'done';
+          value: boolean;
+          oldValue: boolean;
       }
     | {
           type: 'insert';
@@ -39,7 +45,6 @@ export type PatchOp =
           toParentPath: Path | null;
           toIndex: number;
       };
-
 export type Patch = {
     ops: PatchOp[];
 };

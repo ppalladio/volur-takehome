@@ -1,44 +1,151 @@
 'use client';
 
-import { Button, Input, Switch } from '@/components';
+import {
+    Button,
+    Checkbox,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+    Input,
+} from '@/components';
+
 import { useEditor } from '@/hooks';
 import { Block, Path } from '@/lib/editor/types';
-import { CheckSquare, ChevronDown, FileText, GripVertical, Trash2 } from 'lucide-react';
+import { FileText, GripVertical, MoreVertical } from 'lucide-react';
 import { useRef, useState } from 'react';
+import { useDrag, useDrop } from 'react-dnd';
 import BlockList from './BlockList';
 
-type BlockNodeProps = {
+type BlockNodeProps = Readonly<{
     block: Block;
     path: Path;
     index: number;
     parentPath: Path | null;
+}>;
+
+type DragItem = {
+    type: string;
+    path: Path;
+    parentPath: Path | null;
+    index: number;
+    blockId: string;
 };
 
+type DropPosition = 'before' | 'after' | 'child';
+
 export default function BlockNode({ block, path, index, parentPath }: BlockNodeProps) {
-    const { updateContent, toggleTodo, deleteBlock, insertBlock } = useEditor();
+    const { updateContent, toggleTodo, deleteBlock, insertBlock, moveBlock } = useEditor();
     const [isEditing, setIsEditing] = useState(false);
+    const [dropPosition, setDropPosition] = useState<DropPosition | null>(null);
     const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const elementRef = useRef<HTMLDivElement>(null);
 
     const hasChildren = block.children && block.children.length > 0;
+
+    // Drag and drop
+    const [{ isDragging }, drag, preview] = useDrag({
+        type: 'BLOCK',
+        item: (): DragItem => ({
+            type: 'BLOCK',
+            path,
+            parentPath,
+            index,
+            blockId: block.id,
+        }),
+        collect: (monitor) => ({
+            isDragging: monitor.isDragging(),
+        }),
+    });
+
+    const [{ isOver, canDrop }, drop] = useDrop({
+        accept: 'BLOCK',
+        canDrop: (item: DragItem) => {
+            // Can't drop on itself
+            if (item.blockId === block.id) return false;
+            // Can't drop parent into its own child
+            if (path.length > item.path.length) {
+                const isDescendant = item.path.every((p, i) => p === path[i]);
+                if (isDescendant) return false;
+            }
+            return true;
+        },
+        hover: (item: DragItem, monitor) => {
+            if (!elementRef.current) return;
+
+            const hoverBoundingRect = elementRef.current.getBoundingClientRect();
+            const clientOffset = monitor.getClientOffset();
+
+            if (!clientOffset) return;
+
+            const hoverClientY = clientOffset.y - hoverBoundingRect.top;
+            const hoverHeight = hoverBoundingRect.height;
+
+            // Determine drop position based on mouse position
+            if (hoverClientY < hoverHeight * 0.25) {
+                setDropPosition('before');
+            } else if (hoverClientY > hoverHeight * 0.75) {
+                setDropPosition('after');
+            } else {
+                setDropPosition('child');
+            }
+        },
+        drop: (item: DragItem, monitor) => {
+            if (!monitor.canDrop()) return;
+
+            let toParentPath: Path | null;
+            let toIndex: number;
+
+            if (dropPosition === 'before') {
+                // Insert before this block (as sibling)
+                toParentPath = parentPath;
+                toIndex = index;
+            } else if (dropPosition === 'after') {
+                // Insert after this block (as sibling)
+                toParentPath = parentPath;
+                toIndex = index + 1;
+            } else {
+                // Insert as child (append to children)
+                toParentPath = path;
+                toIndex = block.children?.length ?? 0;
+            }
+
+            // Only move if position actually changed
+            if (JSON.stringify(item.parentPath) !== JSON.stringify(toParentPath) || item.index !== toIndex) {
+                moveBlock(item.parentPath, item.index, toParentPath, toIndex);
+            }
+
+            setDropPosition(null);
+        },
+        collect: (monitor) => ({
+            isOver: monitor.isOver({ shallow: true }),
+            canDrop: monitor.canDrop(),
+        }),
+    });
+
+    // Combine drag and drop refs using callback ref
+    const setRefs = (element: HTMLDivElement | null) => {
+        elementRef.current = element;
+        drag(element);
+        preview(drop(element));
+    };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newValue = e.target.value;
 
-        // Clear previous debounce timer
         if (debounceTimerRef.current) {
             clearTimeout(debounceTimerRef.current);
         }
 
-        // Set new debounce timer (100ms delay)
         debounceTimerRef.current = setTimeout(() => {
             updateContent(path, newValue);
-        }, 100);
+        }, 300);
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            // Clear debounce and send immediately
             if (debounceTimerRef.current) {
                 clearTimeout(debounceTimerRef.current);
             }
@@ -46,7 +153,6 @@ export default function BlockNode({ block, path, index, parentPath }: BlockNodeP
             setIsEditing(false);
         }
         if (e.key === 'Escape') {
-            // Clear debounce timer
             if (debounceTimerRef.current) {
                 clearTimeout(debounceTimerRef.current);
             }
@@ -55,7 +161,6 @@ export default function BlockNode({ block, path, index, parentPath }: BlockNodeP
     };
 
     const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-        // Clear debounce and send immediately on blur
         if (debounceTimerRef.current) {
             clearTimeout(debounceTimerRef.current);
         }
@@ -70,20 +175,32 @@ export default function BlockNode({ block, path, index, parentPath }: BlockNodeP
         setIsEditing(true);
     };
 
+    const opacity = isDragging ? 0.4 : 1;
+
+    const getDropIndicatorClasses = () => {
+        if (!isOver || !canDrop) return '';
+
+        if (dropPosition === 'before') {
+            return 'border-t-2 border-blue-500';
+        } else if (dropPosition === 'after') {
+            return 'border-b-2 border-blue-500';
+        } else {
+            return 'ring-2 ring-blue-500 bg-blue-50';
+        }
+    };
+
     return (
-        <div className="group">
-            <div className="flex items-start gap-2 p-2 rounded-md hover:bg-accent/50 transition-colors">
+        <div ref={setRefs} style={{ opacity }} className={`group ${getDropIndicatorClasses()}`}>
+            <div className="flex items-center gap-2 p-2 rounded-md hover:bg-accent/50 transition-colors">
                 {/* Drag handle */}
-                <div className="opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing mt-1">
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing mt-1 shrink-0">
                     <GripVertical className="w-4 h-4 text-muted-foreground" />
                 </div>
 
-                {/* Type indicator or switch */}
-                <div className="flex items-center gap-2 mt-1">
+                {/* Type indicator or checkbox */}
+                <div className="flex items-center  gap-2 mt-1 shrink-0">
                     {block.type === 'todo' ? (
-                        <div className="flex items-center space-x-2">
-                            <Switch id={`todo-${block.id}`} checked={block.done ?? false} onCheckedChange={() => toggleTodo(path)} />
-                        </div>
+                        <Checkbox checked={block.done ?? false} onCheckedChange={() => toggleTodo(path)} />
                     ) : (
                         <FileText className="w-4 h-4 text-muted-foreground" />
                     )}
@@ -102,64 +219,48 @@ export default function BlockNode({ block, path, index, parentPath }: BlockNodeP
                             autoFocus
                         />
                     ) : (
-                        <div
+                        <Button
                             onClick={handleStartEdit}
-                            className={`px-2 py-1 cursor-text rounded hover:bg-accent/30 transition-colors ${
+                            className={`px-2 py-1 cursor-text rounded hover:bg-accent/30 transition-colors truncate text-left w-full justify-start ${
                                 block.type === 'todo' && block.done ? 'line-through text-muted-foreground' : ''
                             }`}
+                            title={block.content}
+                            variant="ghost"
                         >
                             {block.content || <span className="text-muted-foreground italic">Empty block (click to edit)</span>}
-                        </div>
-                    )}
-
-                    {/* Children */}
-                    {hasChildren && (
-                        <div className="ml-6 mt-2 border-l-2 border-border pl-4">
-                            <BlockList blocks={block.children!} parentPath={path} />
-                        </div>
+                        </Button>
                     )}
                 </div>
 
-                {/* Actions */}
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Button
-                        onClick={() => insertBlock(path, block.children?.length ?? 0, 'text')}
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        title="Add child text block"
-                    >
-                        <FileText className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button
-                        onClick={() => insertBlock(path, block.children?.length ?? 0, 'todo')}
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        title="Add child todo block"
-                    >
-                        <CheckSquare className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button
-                        onClick={() => insertBlock(parentPath, index + 1, 'text')}
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        title="Add sibling below"
-                    >
-                        <ChevronDown className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button
-                        onClick={() => deleteBlock(parentPath, index)}
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-destructive hover:text-destructive"
-                        title="Delete block"
-                    >
-                        <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
+                {/* Actions dropdown */}
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-7 w-7">
+                                <MoreVertical className="w-4 h-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => insertBlock(path, block.children?.length ?? 0, 'text')}>
+                                Add child text block
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => insertBlock(path, block.children?.length ?? 0, 'todo')}>Add child todo</DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => insertBlock(parentPath, index + 1, 'text')}>Add sibling below</DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => deleteBlock(parentPath, index)} className="text-destructive">
+                                Delete block
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             </div>
+
+            {hasChildren && (
+                <div className="ml-6 mt-2 border-l-2 border-border pl-4">
+                    <BlockList blocks={block.children!} parentPath={path} />
+                </div>
+            )}
         </div>
     );
 }

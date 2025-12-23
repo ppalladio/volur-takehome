@@ -1,7 +1,19 @@
-export default function EditorLayout({ children }: { children: React.ReactNode }) {
+'use client';
+
+import { useKeyboardShortcuts } from '@/hooks';
+import { DndProvider } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
+import Editor from './components/Editor';
+
+export default function EditorLayout() {
+    // Global keyboard shortcuts (Ctrl+Z, Ctrl+Shift+Z)
+    useKeyboardShortcuts();
+
     return (
-        <div className="flex flex-col h-screen">
-            <div className="flex-1 overflow-hidden">{children}</div>
-        </div>
+        <DndProvider backend={HTML5Backend}>
+            <div className="space-y-4">
+                <Editor />
+            </div>
+        </DndProvider>
     );
 }
