@@ -18,6 +18,8 @@ export type EditorContextType = {
     canRedo: boolean;
     redoBranches: RedoBranch[];
     cursorPosition: CursorPosition;
+    historyNodes: HistoryNode[];
+    currentIndex: number;
 
     // Actions
     updateContent: (path: Path, content: string) => void;
@@ -247,6 +249,8 @@ export function EditorProvider({ children, initialDoc }: EditorProviderProps) {
             canRedo,
             redoBranches,
             cursorPosition,
+            historyNodes,
+            currentIndex,
             updateContent,
             toggleTodo,
             insertBlock,
@@ -262,6 +266,8 @@ export function EditorProvider({ children, initialDoc }: EditorProviderProps) {
             canRedo,
             redoBranches,
             cursorPosition,
+            historyNodes,
+            currentIndex,
             updateContent,
             toggleTodo,
             insertBlock,

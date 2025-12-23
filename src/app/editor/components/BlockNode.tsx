@@ -28,7 +28,7 @@ type DropPosition = 'before' | 'after' | 'child';
 
 export default function BlockNode({ block, path, index, parentPath }: BlockNodeProps) {
     const { updateContent, toggleTodo, deleteBlock, insertBlock, moveBlock, cursorPosition, setCursorPosition } = useEditor();
-    const [isEditing, setIsEditing] = useState(false);
+    const [isEditing, setIsEditing] = useState(block.autoFocus || cursorPosition?.blockId === block.id || false);
     const [localContent, setLocalContent] = useState(block.content);
     const [dropPosition, setDropPosition] = useState<DropPosition | null>(null);
     const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -38,39 +38,14 @@ export default function BlockNode({ block, path, index, parentPath }: BlockNodeP
 
     const hasChildren = block.children && block.children.length > 0;
 
-    // Auto-focus and restore cursor on mount if this block was being edited
-    useEffect(() => {
-        if (hasRestoredRef.current) return;
-
-        const shouldRestore = cursorPosition && cursorPosition.blockId === block.id;
-        const shouldAutoFocus = block.autoFocus;
-
-        if (shouldAutoFocus || shouldRestore) {
-            setIsEditing(true);
-            setLocalContent(block.content); // Set initial content
-            hasRestoredRef.current = true;
-
-            // Use requestAnimationFrame to ensure the input is rendered
-            requestAnimationFrame(() => {
-                if (inputRef.current) {
-                    inputRef.current.focus();
-
-                    if (shouldRestore) {
-                        // Restore cursor position
-                        inputRef.current.setSelectionRange(cursorPosition.selectionStart, cursorPosition.selectionEnd);
-                    }
-                }
-            });
-        }
-    }, [block.autoFocus, block.id, block.content, cursorPosition]);
-
     // Update local content when block content changes from external source (e.g., undo/redo)
-    // but only when not actively editing
+    // but only when not actively editing, and only if content is truly different.
+    // This prevents local edits from being overwritten instantly.
     useEffect(() => {
-        if (!isEditing) {
+        if (!isEditing && block.content !== localContent) {
             setLocalContent(block.content);
         }
-    }, [block.content, isEditing]);
+    }, [block.content, isEditing, localContent]);
 
     // Save cursor position when selection changes
     const handleSelectionChange = (e: React.SyntheticEvent<HTMLInputElement>) => {

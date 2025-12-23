@@ -1,13 +1,15 @@
-// lib/editor/persistence.ts
-import { Block, BlockArray, CursorPosition, HistoryNode } from './types';
+import { z } from 'zod';
+import { Block, BlockArray, BlockArraySchema, CursorPosition, CursorPositionSchema, HistoryNode, HistoryNodesSchema } from './types';
 
-export type PersistedState = {
-    doc: BlockArray;
-    historyNodes: HistoryNode[];
-    currentIndex: number;
-    cursor: CursorPosition; // Add cursor position
-    version: number;
-};
+const PersistedStateSchema = z.object({
+    doc: BlockArraySchema,
+    historyNodes: HistoryNodesSchema,
+    currentIndex: z.number().int(),
+    cursor: CursorPositionSchema,
+    version: z.number().int().positive(),
+});
+
+export type PersistedState = z.infer<typeof PersistedStateSchema>;
 
 const STORAGE_KEY = 'mini-notion-editor-state';
 const STORAGE_VERSION = 1;
@@ -59,7 +61,7 @@ function stripTransientFlagsFromHistory(nodes: HistoryNode[]): HistoryNode[] {
 }
 
 /**
- * Save editor state to localStorage
+ * Save editor state to localStorage with validation
  */
 export function saveEditorState(doc: BlockArray, historyNodes: HistoryNode[], currentIndex: number, cursor: CursorPosition): void {
     try {
@@ -70,6 +72,14 @@ export function saveEditorState(doc: BlockArray, historyNodes: HistoryNode[], cu
             cursor,
             version: STORAGE_VERSION,
         };
+
+        // Validate before saving
+        const validationResult = PersistedStateSchema.safeParse(state);
+        if (!validationResult.success) {
+            console.error('❌ Failed to validate state before saving:', validationResult.error.issues);
+            return;
+        }
+
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         console.log('💾 Saved editor state:', {
             docBlocks: doc.length,
@@ -83,7 +93,7 @@ export function saveEditorState(doc: BlockArray, historyNodes: HistoryNode[], cu
 }
 
 /**
- * Load editor state from localStorage
+ * Load editor state from localStorage with validation
  */
 export function loadEditorState(): PersistedState | null {
     try {
@@ -93,9 +103,20 @@ export function loadEditorState(): PersistedState | null {
             return null;
         }
 
-        const state = JSON.parse(stored) as PersistedState;
+        const parsed = JSON.parse(stored);
 
-        // Version check for future migrations
+        // Validate with Zod
+        const validationResult = PersistedStateSchema.safeParse(parsed);
+        if (!validationResult.success) {
+            console.error('❌ Persisted state failed validation:', validationResult.error.issues);
+            console.warn('⚠️ Clearing invalid persisted state');
+            clearEditorState();
+            return null;
+        }
+
+        const state = validationResult.data;
+
+        // Version check
         if (state.version !== STORAGE_VERSION) {
             console.warn('⚠️ Persisted state version mismatch, ignoring');
             return null;
@@ -111,6 +132,7 @@ export function loadEditorState(): PersistedState | null {
         return state;
     } catch (error) {
         console.error('Failed to load editor state:', error);
+        clearEditorState();
         return null;
     }
 }
