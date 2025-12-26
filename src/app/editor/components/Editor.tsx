@@ -1,15 +1,14 @@
 'use client';
 
-import { useEditor, useKeyboardShortcuts } from '@/hooks';
-import BlockList from './BlockList';
-import Toolbar from './Toolbar';
+import { useEditor, useKeyboardShortcuts } from '../hooks';
+import {BlockList} from './BlockList';
+import { Toolbar } from './Toolbar';
 
 import { FileQuestion } from 'lucide-react';
 
-export default function Editor() {
+export const Editor = () => {
     const { doc } = useEditor();
 
-    // Enable keyboard shortcuts
     useKeyboardShortcuts();
 
     return (
@@ -32,4 +31,4 @@ export default function Editor() {
             </div>
         </div>
     );
-}
+};

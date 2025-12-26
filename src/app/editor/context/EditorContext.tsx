@@ -1,8 +1,21 @@
 'use client';
 
-import { deleteBlockCommand, insertBlockCommand, moveBlockCommand, toggleTodoCommand, updateContentCommand } from '@/lib/editor/commands';
-import { applyPatch } from '@/lib/editor/patches';
-import { BlockArray, BlockType, Command, Path } from '@/lib/editor/types';
+import { useHistoryTree, usePersistence } from '@/editor/hooks';
+import {
+    BlockArray,
+    BlockType,
+    CursorPosition,
+    deleteBlockCommand,
+    HistoryNode,
+    insertBlockCommand,
+    loadEditorState,
+    moveBlockCommand,
+    Path,
+    RedoBranch,
+    STORAGE_CONFIG,
+    toggleTodoCommand,
+    updateContentCommand,
+} from '@/editor/lib';
 import { createContext, ReactNode, useCallback, useMemo, useState } from 'react';
 
 export type EditorContextType = {
@@ -10,6 +23,10 @@ export type EditorContextType = {
     doc: BlockArray;
     canUndo: boolean;
     canRedo: boolean;
+    redoBranches: RedoBranch[];
+    cursorPosition: CursorPosition;
+    historyNodes: HistoryNode[];
+    currentIndex: number;
 
     // Actions
     updateContent: (path: Path, content: string) => void;
@@ -17,155 +34,121 @@ export type EditorContextType = {
     insertBlock: (parentPath: Path | null, index: number, type: BlockType) => void;
     deleteBlock: (parentPath: Path | null, index: number) => void;
     moveBlock: (fromParentPath: Path | null, fromIndex: number, toParentPath: Path | null, toIndex: number) => void;
+    setCursorPosition: (cursor: CursorPosition) => void;
     undo: () => void;
-    redo: () => void;
+    redo: (nodeIndex?: number) => void;
 };
 
 export const EditorContext = createContext<EditorContextType | undefined>(undefined);
 
-type EditorProviderProps = {
-    readonly children: ReactNode;
-    readonly initialDoc: BlockArray;
-};
+type EditorProviderProps = Readonly<{
+    children: ReactNode;
+    initialDoc: BlockArray;
+}>;
 
 export function EditorProvider({ children, initialDoc }: EditorProviderProps) {
-    const [doc, setDoc] = useState<BlockArray>(initialDoc);
-    const [history, setHistory] = useState<Command[]>([]);
-    const [historyIndex, setHistoryIndex] = useState(-1);
+    // Initialize from localStorage or use defaults
+    const persistedState = globalThis.window === undefined ? null : loadEditorState();
 
-    // Execute a command (adds to history)
-    const execute = useCallback(
-        (command: Command | null) => {
-            if (!command) {
-                console.warn('Invalid command, skipping execution');
-                return;
-            }
+    // Use history tree hook for document and history management
+    const history = useHistoryTree(persistedState?.doc ?? initialDoc);
 
-            console.group('⚡ Execute Command');
-            console.log('Forward patch:', command.forward);
-            console.log('Inverse patch:', command.inverse);
+    // Cursor position state (managed separately as it's UI-specific)
+    const [cursorPosition, setCursorPosition] = useState<CursorPosition>(persistedState?.cursor ?? null);
 
-            // Calculate patch sizes
-            const forwardSize = JSON.stringify(command.forward).length;
-            const inverseSize = JSON.stringify(command.inverse).length;
-            const docSize = JSON.stringify(doc).length;
-
-            console.log('📊 Size Analysis:');
-            console.log(`  Forward patch: ${forwardSize} bytes`);
-            console.log(`  Inverse patch: ${inverseSize} bytes`);
-            console.log(`  Full document: ${docSize} bytes`);
-            console.log(`  Efficiency: ${((forwardSize / docSize) * 100).toFixed(2)}% of doc size`);
-
-            const newDoc = applyPatch(doc, command.forward);
-            setDoc(newDoc);
-
-            // Clear redo history when new action is performed
-            const newHistory = history.slice(0, historyIndex + 1);
-            newHistory.push(command);
-            setHistory(newHistory);
-            setHistoryIndex(newHistory.length - 1);
-
-            console.log(`📚 History: ${newHistory.length} commands, at index ${newHistory.length - 1}`);
-            console.groupEnd();
+    // Persist full editor state to localStorage
+    usePersistence(
+        'editor-state',
+        {
+            doc: history.doc,
+            historyNodes: history.historyNodes,
+            currentIndex: history.currentIndex,
+            cursor: cursorPosition,
         },
-        [doc, history, historyIndex],
+        STORAGE_CONFIG.AUTO_SAVE_DELAY_MS,
     );
-
-    // Undo
-    const undo = useCallback(() => {
-        if (historyIndex < 0) return;
-
-        console.group('⏪ UNDO');
-        const command = history[historyIndex];
-        console.log('Applying inverse patch:', command.inverse);
-
-        const newDoc = applyPatch(doc, command.inverse);
-        setDoc(newDoc);
-        setHistoryIndex(historyIndex - 1);
-
-        console.log(`📚 History position: ${historyIndex} → ${historyIndex - 1}`);
-        console.groupEnd();
-    }, [doc, history, historyIndex]);
-
-    // Redo
-    const redo = useCallback(() => {
-        if (historyIndex >= history.length - 1) return;
-
-        console.group('⏩ REDO');
-        const command = history[historyIndex + 1];
-        console.log('Applying forward patch:', command.forward);
-
-        const newDoc = applyPatch(doc, command.forward);
-        setDoc(newDoc);
-        setHistoryIndex(historyIndex + 1);
-
-        console.log(`📚 History position: ${historyIndex} → ${historyIndex + 1}`);
-        console.groupEnd();
-    }, [doc, history, historyIndex]);
 
     // Action wrappers that create commands and execute them
     const updateContent = useCallback(
         (path: Path, content: string) => {
-            console.log('🎯 Action: Update Content', { path, content });
-            const command = updateContentCommand(doc, path, content);
-            execute(command);
+            const command = updateContentCommand(history.doc, path, content);
+            history.execute(command);
         },
-        [doc, execute],
+        [history],
     );
 
     const toggleTodo = useCallback(
         (path: Path) => {
-            console.log('🎯 Action: Toggle Todo', { path });
-            const command = toggleTodoCommand(doc, path);
-            execute(command);
+            const command = toggleTodoCommand(history.doc, path);
+            history.execute(command);
         },
-        [doc, execute],
+        [history],
     );
 
     const insertBlock = useCallback(
         (parentPath: Path | null, index: number, type: BlockType) => {
-            console.log('🎯 Action: Insert Block', { parentPath, index, type });
             const command = insertBlockCommand(parentPath, index, type);
-            execute(command);
+            history.execute(command);
         },
-        [execute],
+        [history],
     );
 
     const deleteBlock = useCallback(
         (parentPath: Path | null, index: number) => {
-            console.log('🎯 Action: Delete Block', { parentPath, index });
-            const command = deleteBlockCommand(doc, parentPath, index);
-            execute(command);
+            const command = deleteBlockCommand(history.doc, parentPath, index);
+            history.execute(command);
         },
-        [doc, execute],
+        [history],
     );
 
     const moveBlock = useCallback(
         (fromParentPath: Path | null, fromIndex: number, toParentPath: Path | null, toIndex: number) => {
-            console.log('🎯 Action: Move Block', { fromParentPath, fromIndex, toParentPath, toIndex });
             const command = moveBlockCommand(fromParentPath, fromIndex, toParentPath, toIndex);
-            execute(command);
+            history.execute(command);
         },
-        [execute],
+        [history],
     );
 
-    const canUndo = historyIndex >= 0;
-    const canRedo = historyIndex < history.length - 1;
-
-    const value = useMemo(
+    // Compose context value from history hook and local state
+    const value: EditorContextType = useMemo(
         () => ({
-            doc,
-            canUndo,
-            canRedo,
+            // State from history hook
+            doc: history.doc,
+            historyNodes: history.historyNodes,
+            currentIndex: history.currentIndex,
+            canUndo: history.canUndo,
+            canRedo: history.canRedo,
+            redoBranches: history.redoBranches,
+
+            // Local cursor state
+            cursorPosition,
+            setCursorPosition,
+
+            // Actions
             updateContent,
             toggleTodo,
             insertBlock,
             deleteBlock,
             moveBlock,
-            undo,
-            redo,
+            undo: history.undo,
+            redo: history.redo,
         }),
-        [doc, canUndo, canRedo, updateContent, toggleTodo, insertBlock, deleteBlock, moveBlock, undo, redo],
+        [
+            history.doc,
+            history.historyNodes,
+            history.currentIndex,
+            history.canUndo,
+            history.canRedo,
+            history.redoBranches,
+            history.undo,
+            history.redo,
+            cursorPosition,
+            updateContent,
+            toggleTodo,
+            insertBlock,
+            deleteBlock,
+            moveBlock,
+        ],
     );
 
     return <EditorContext.Provider value={value}>{children}</EditorContext.Provider>;

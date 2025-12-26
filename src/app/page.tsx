@@ -1,6 +1,6 @@
 'use client';
-import { BlockArray } from '@/lib/editor/types';
-import { createBlock } from '@/lib/editor/utils';
+import { BlockArray } from '@/app/editor/lib/types';
+import { createBlock } from '@/app/editor/lib/utils';
 import { EditorProvider } from './editor/context/EditorContext';
 import EditorLayout from './editor/layout';
 
