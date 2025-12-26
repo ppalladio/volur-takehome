@@ -104,8 +104,6 @@ export const HistoryTreeSchema = z.object({
     nodes: HistoryNodesSchema,
     currentIndex: z.number().int(),
 });
-
-// Existing TypeScript types (keep as-is)
 export type BlockType = 'text' | 'todo';
 
 export type BaseBlock = {
@@ -185,3 +183,8 @@ export type CursorPosition = {
     selectionStart: number;
     selectionEnd: number;
 } | null;
+
+export type RedoBranch = {
+    node: HistoryNode;
+    nodeIndex: number;
+};

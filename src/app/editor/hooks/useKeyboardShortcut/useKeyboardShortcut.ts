@@ -1,9 +1,9 @@
 'use client';
 
-import { useEditor } from '@/hooks';
 import { useEffect } from 'react';
+import { useEditor } from '../useEditor/useEditor';
 
-export function useKeyboardShortcuts() {
+export const useKeyboardShortcuts = () => {
     const { undo, redo, canUndo, canRedo } = useEditor();
 
     useEffect(() => {
@@ -34,4 +34,4 @@ export function useKeyboardShortcuts() {
             globalThis.removeEventListener('keydown', handleKeyDown);
         };
     }, [undo, redo, canUndo, canRedo]);
-}
+};

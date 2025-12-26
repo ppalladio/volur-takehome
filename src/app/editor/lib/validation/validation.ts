@@ -1,5 +1,6 @@
 import { ZodError } from 'zod';
-import { Block, BlockArray, BlockArraySchema, CursorPosition, CursorPositionSchema, HistoryNode, HistoryNodesSchema, Path } from './types';
+import { Block, BlockArray, BlockArraySchema, CursorPosition, CursorPositionSchema, HistoryNode, HistoryNodesSchema, Path } from '../types';
+import { findBlockById } from '../utils';
 
 export type ValidationError = {
     type: 'duplicate_id' | 'invalid_block' | 'invalid_history' | 'invalid_cursor' | 'orphaned_parent' | 'schema_error';
@@ -15,7 +16,7 @@ export type ValidationResult = {
 /**
  * Convert Zod error to validation errors
  */
-function zodErrorToValidationErrors(zodError: ZodError, errorType: ValidationError['type']): ValidationError[] {
+const zodErrorToValidationErrors = (zodError: ZodError, errorType: ValidationError['type']): ValidationError[] => {
     return zodError.issues.map((issue) => ({
         type: errorType,
         message: issue.message,
@@ -25,12 +26,12 @@ function zodErrorToValidationErrors(zodError: ZodError, errorType: ValidationErr
             code: issue.code,
         },
     }));
-}
+};
 
 /**
  * Validate document integrity using Zod + custom checks
  */
-export function validateDocument(doc: BlockArray): ValidationResult {
+export const validateDocument = (doc: BlockArray): ValidationResult => {
     const errors: ValidationError[] = [];
 
     // Schema validation
@@ -69,12 +70,12 @@ export function validateDocument(doc: BlockArray): ValidationResult {
         isValid: errors.length === 0,
         errors,
     };
-}
+};
 
 /**
  * Validate history graph integrity using Zod + custom checks
  */
-export function validateHistory(historyNodes: HistoryNode[], currentIndex: number): ValidationResult {
+export const validateHistory = (historyNodes: HistoryNode[], currentIndex: number): ValidationResult => {
     const errors: ValidationError[] = [];
 
     // Schema validation
@@ -93,9 +94,7 @@ export function validateHistory(historyNodes: HistoryNode[], currentIndex: numbe
         });
     }
 
-    // Custom validations
     historyNodes.forEach((node, index) => {
-        // Check if parentIndex is valid
         if (node.parentIndex !== null) {
             if (node.parentIndex < 0 || node.parentIndex >= historyNodes.length) {
                 errors.push({
@@ -112,7 +111,6 @@ export function validateHistory(historyNodes: HistoryNode[], currentIndex: numbe
             }
         }
 
-        // Check if branches point to valid indices
         node.branches.forEach((branchIndex) => {
             if (branchIndex < 0 || branchIndex >= historyNodes.length) {
                 errors.push({
@@ -123,7 +121,6 @@ export function validateHistory(historyNodes: HistoryNode[], currentIndex: numbe
             }
         });
 
-        // Check if timestamp is reasonable
         if (node.timestamp > Date.now() + 60000) {
             // Allow 1 minute in future for clock skew
             errors.push({
@@ -152,12 +149,12 @@ export function validateHistory(historyNodes: HistoryNode[], currentIndex: numbe
         isValid: errors.length === 0,
         errors,
     };
-}
+};
 
 /**
  * Validate cursor position using Zod + custom checks
  */
-export function validateCursor(cursor: CursorPosition, doc: BlockArray): ValidationResult {
+export const validateCursor = (cursor: CursorPosition, doc: BlockArray): ValidationResult => {
     const errors: ValidationError[] = [];
 
     if (cursor === null) {
@@ -172,22 +169,7 @@ export function validateCursor(cursor: CursorPosition, doc: BlockArray): Validat
     }
 
     // Find block with cursor's blockId
-    let blockFound: Block | null = null;
-
-    function findBlock(blocks: BlockArray): boolean {
-        for (const block of blocks) {
-            if (cursor && block.id === cursor.blockId) {
-                blockFound = block;
-                return true;
-            }
-            if (block.children && findBlock(block.children)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    findBlock(doc);
+    const blockFound = findBlockById(doc, cursor.blockId);
 
     if (blockFound === null) {
         errors.push({
@@ -225,12 +207,12 @@ export function validateCursor(cursor: CursorPosition, doc: BlockArray): Validat
         isValid: errors.length === 0,
         errors,
     };
-}
+};
 
 /**
  * Validate entire editor state
  */
-export function validateEditorState(doc: BlockArray, historyNodes: HistoryNode[], currentIndex: number, cursor: CursorPosition): ValidationResult {
+export const validateEditorState = (doc: BlockArray, historyNodes: HistoryNode[], currentIndex: number, cursor: CursorPosition): ValidationResult => {
     const errors: ValidationError[] = [];
 
     // Validate document
@@ -249,4 +231,4 @@ export function validateEditorState(doc: BlockArray, historyNodes: HistoryNode[]
         isValid: errors.length === 0,
         errors,
     };
-}
+};

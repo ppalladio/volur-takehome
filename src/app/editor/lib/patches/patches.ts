@@ -1,7 +1,7 @@
-import { BlockArray, Patch, PatchOp } from './types';
-import { getBlockAtPath, getParentArray } from './utils';
+import { BlockArray, Patch, PatchOp } from '../types';
+import { getBlockAtPath, getParentArray, pathEquals } from '../utils';
 
-function applyUpdateOp(doc: BlockArray, op: Extract<PatchOp, { type: 'update' }>) {
+const applyUpdateOp = (doc: BlockArray, op: Extract<PatchOp, { type: 'update' }>) => {
     const block = getBlockAtPath(doc, op.path);
     if (block) {
         if (op.field === 'content') {
@@ -10,23 +10,22 @@ function applyUpdateOp(doc: BlockArray, op: Extract<PatchOp, { type: 'update' }>
             block.done = op.value;
         }
     }
-}
+};
 
-function applyInsertOp(doc: BlockArray, op: Extract<PatchOp, { type: 'insert' }>) {
+const applyInsertOp = (doc: BlockArray, op: Extract<PatchOp, { type: 'insert' }>) => {
     const parent = getParentArray(doc, op.parentPath);
     if (parent) {
         parent.splice(op.index, 0, structuredClone(op.block));
     }
-}
-
-function applyDeleteOp(doc: BlockArray, op: Extract<PatchOp, { type: 'delete' }>) {
+};
+const applyDeleteOp = (doc: BlockArray, op: Extract<PatchOp, { type: 'delete' }>) => {
     const parent = getParentArray(doc, op.parentPath);
     if (parent) {
         parent.splice(op.index, 1);
     }
-}
+};
 
-function applyMoveOp(doc: BlockArray, op: Extract<PatchOp, { type: 'move' }>) {
+const applyMoveOp = (doc: BlockArray, op: Extract<PatchOp, { type: 'move' }>) => {
     const fromParent = getParentArray(doc, op.fromParentPath);
     if (!fromParent?.[op.fromIndex]) return;
 
@@ -34,7 +33,7 @@ function applyMoveOp(doc: BlockArray, op: Extract<PatchOp, { type: 'move' }>) {
     fromParent.splice(op.fromIndex, 1);
 
     let adjustedToIndex = op.toIndex;
-    const isSameParent = JSON.stringify(op.fromParentPath) === JSON.stringify(op.toParentPath);
+    const isSameParent = pathEquals(op.fromParentPath, op.toParentPath);
     if (isSameParent && op.fromIndex < op.toIndex) {
         adjustedToIndex--;
     }
@@ -43,9 +42,9 @@ function applyMoveOp(doc: BlockArray, op: Extract<PatchOp, { type: 'move' }>) {
     if (toParent) {
         toParent.splice(adjustedToIndex, 0, blockToMove);
     }
-}
+};
 
-export function applyPatch(doc: BlockArray, patch: Patch): BlockArray {
+export const applyPatch = (doc: BlockArray, patch: Patch): BlockArray => {
     const result = structuredClone(doc);
 
     for (const op of patch.ops) {
@@ -66,4 +65,4 @@ export function applyPatch(doc: BlockArray, patch: Patch): BlockArray {
     }
 
     return result;
-}
+};

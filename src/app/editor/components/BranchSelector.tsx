@@ -2,11 +2,11 @@
 
 import { Button } from '@/components';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { useEditor } from '@/hooks';
-import { getCommandPreview, getTimeAgo } from '@/lib/index';
+import { useEditor } from '@/editor/hooks';
+import { getCommandPreview, getTimeAgo } from '@/editor/lib';
 import { ChevronDown, Redo2 } from 'lucide-react';
 
-export function BranchSelector() {
+export const BranchSelector = () => {
     const { redoBranches, redo, canRedo } = useEditor();
 
     if (!canRedo) {
@@ -54,4 +54,4 @@ export function BranchSelector() {
             </DropdownMenuContent>
         </DropdownMenu>
     );
-}
+};

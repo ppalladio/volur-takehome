@@ -2,27 +2,12 @@
 
 import { Button } from '@/components';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { useEditor } from '@/hooks';
-import { clearEditorState } from '@/lib/editor/persistence';
-import { validateEditorState, ValidationError } from '@/lib/editor/validation';
+import { useIntegrityCheck } from '@/editor/hooks';
+import { clearEditorState } from '@/editor/lib';
 import { AlertTriangle } from 'lucide-react';
-import { useEffect, useState } from 'react';
 
-export function IntegrityCheck() {
-    const { doc, historyNodes, currentIndex, cursorPosition } = useEditor();
-    const [errors, setErrors] = useState<ValidationError[]>([]);
-
-    // Check integrity whenever state changes
-    useEffect(() => {
-        const result = validateEditorState(doc, historyNodes, currentIndex, cursorPosition);
-        setErrors(result.errors);
-
-        if (result.isValid === false) {
-            console.error('🚨 Integrity check failed:', result.errors);
-        } else {
-            console.log('✅ Integrity check passed');
-        }
-    }, [doc, historyNodes, currentIndex, cursorPosition]);
+export const IntegrityCheckAlert = () => {
+    const { errors, dismissedErrors, dismissErrors } = useIntegrityCheck();
 
     const handleResetHistory = () => {
         if (confirm('Reset undo/redo history? This will keep your current document but clear all undo/redo.')) {
@@ -38,11 +23,7 @@ export function IntegrityCheck() {
         }
     };
 
-    const handleDismiss = () => {
-        setErrors([]);
-    };
-
-    if (errors.length === 0) {
+    if (errors.length === 0 || dismissedErrors) {
         return null;
     }
 
@@ -54,15 +35,15 @@ export function IntegrityCheck() {
                 <div className="mt-2">
                     <p className="mb-2 font-medium">The editor detected {errors.length} integrity error(s):</p>
                     <ul className="list-disc list-inside mb-4 text-sm space-y-1">
-                        {errors.slice(0, 5).map((error, i) => (
-                            <li key={i} className="text-xs">
+                        {errors.slice(0, 5).map((error) => (
+                            <li key={`${error.type}-${error.message}`} className="text-xs">
                                 <span className="font-semibold">{error.type}:</span> {error.message}
                             </li>
                         ))}
                         {errors.length > 5 && <li className="text-xs italic">...and {errors.length - 5} more errors</li>}
                     </ul>
                     <div className="flex gap-2 flex-wrap">
-                        <Button onClick={handleDismiss} variant="outline" size="sm">
+                        <Button onClick={dismissErrors} variant="outline" size="sm">
                             Dismiss (Risky)
                         </Button>
                         <Button onClick={handleResetHistory} variant="outline" size="sm">
@@ -79,4 +60,4 @@ export function IntegrityCheck() {
             </AlertDescription>
         </Alert>
     );
-}
+};
