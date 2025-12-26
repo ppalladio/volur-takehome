@@ -1,14 +1,14 @@
 'use client';
 
-import { Block, Path } from '@/lib/editor/types';
-import BlockNode from './BlockNode';
+import { Block, Path } from '@/editor/lib';
+import { BlockNode } from './BlockNode/BlockNode';
 
 type BlockListProps = Readonly<{
     blocks: Block[];
     parentPath: Path | null;
 }>;
 
-export default function BlockList({ blocks, parentPath }: BlockListProps) {
+export const BlockList = ({ blocks, parentPath }: BlockListProps) => {
     return (
         <div className="space-y-1">
             {blocks.map((block, index) => {
@@ -17,4 +17,4 @@ export default function BlockList({ blocks, parentPath }: BlockListProps) {
             })}
         </div>
     );
-}
+};

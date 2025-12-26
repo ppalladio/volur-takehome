@@ -1,12 +1,12 @@
 'use client';
 
 import { Button } from '@/components';
-import { useEditor } from '@/hooks';
+import { useEditor } from '../hooks';
 import { BranchSelector } from './BranchSelector';
 
 import { Plus, Undo2 } from 'lucide-react';
 
-export default function Toolbar() {
+export const Toolbar = () => {
     const { canUndo, undo, insertBlock, doc } = useEditor();
 
     const handleInsertText = () => insertBlock(null, doc.length, 'text');
@@ -32,4 +32,4 @@ export default function Toolbar() {
             </div>
         </div>
     );
-}
+};
