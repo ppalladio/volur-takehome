@@ -1,17 +1,17 @@
-import { useCallback, useMemo, useState } from 'react';
 import {
     BlockArray,
     Command,
     HistoryNode,
     RedoBranch,
     addHistoryNode,
+    applyPatch,
     canRedo as canRedoFn,
     canUndo as canUndoFn,
     getRedoBranches,
     getRedoTargetIndex,
     getUndoTargetIndex,
-    applyPatch,
 } from '@/editor/lib';
+import { useCallback, useMemo, useState } from 'react';
 
 export type UseHistoryTreeReturn = {
     doc: BlockArray;
@@ -36,7 +36,7 @@ export type UseHistoryTreeReturn = {
  * @param initialDoc - The initial document state
  * @returns History tree state and operations
  */
-export const useHistoryTree=(initialDoc: BlockArray): UseHistoryTreeReturn=> {
+export const useHistoryTree = (initialDoc: BlockArray): UseHistoryTreeReturn => {
     const [doc, setDoc] = useState<BlockArray>(initialDoc);
     const [historyNodes, setHistoryNodes] = useState<HistoryNode[]>([]);
     const [currentIndex, setCurrentIndex] = useState<number>(-1);
@@ -49,10 +49,6 @@ export const useHistoryTree=(initialDoc: BlockArray): UseHistoryTreeReturn=> {
                 return;
             }
 
-            console.group('⚡ Execute Command');
-            console.log('Forward patch:', command.forward);
-            console.log('Inverse patch:', command.inverse);
-
             // Apply forward patch to document
             const newDoc = applyPatch(doc, command.forward);
             setDoc(newDoc);
@@ -61,9 +57,6 @@ export const useHistoryTree=(initialDoc: BlockArray): UseHistoryTreeReturn=> {
             const { nodes: updatedNodes, newIndex } = addHistoryNode(historyNodes, currentIndex, command);
             setHistoryNodes(updatedNodes);
             setCurrentIndex(newIndex);
-
-            console.log(`📚 History: ${updatedNodes.length} nodes, at index ${newIndex}`);
-            console.groupEnd();
         },
         [doc, historyNodes, currentIndex],
     );
@@ -77,17 +70,12 @@ export const useHistoryTree=(initialDoc: BlockArray): UseHistoryTreeReturn=> {
             return;
         }
 
-        console.group('⏪ UNDO');
         const node = historyNodes[currentIndex];
-        console.log('Applying inverse patch:', node.command.inverse);
 
         // Apply inverse patch
         const newDoc = applyPatch(doc, node.command.inverse);
         setDoc(newDoc);
         setCurrentIndex(targetIndex);
-
-        console.log(`📚 History position: ${currentIndex} → ${targetIndex}`);
-        console.groupEnd();
     }, [doc, historyNodes, currentIndex]);
 
     // Redo with optional branch selection
@@ -100,17 +88,12 @@ export const useHistoryTree=(initialDoc: BlockArray): UseHistoryTreeReturn=> {
                 return;
             }
 
-            console.group('⏩ REDO');
             const node = historyNodes[targetIndex];
-            console.log('Applying forward patch:', node.command.forward);
 
             // Apply forward patch
             const newDoc = applyPatch(doc, node.command.forward);
             setDoc(newDoc);
             setCurrentIndex(targetIndex);
-
-            console.log(`📚 History position: ${currentIndex} → ${targetIndex}`);
-            console.groupEnd();
         },
         [doc, historyNodes, currentIndex],
     );
@@ -140,4 +123,4 @@ export const useHistoryTree=(initialDoc: BlockArray): UseHistoryTreeReturn=> {
         canRedo,
         redoBranches,
     };
-}
+};

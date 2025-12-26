@@ -22,10 +22,9 @@ export type UseCursorPositionReturn = {
  */
 export const useCursorPosition = (
     blockId: string,
-
     setCursorPosition: (pos: CursorPosition | null) => void,
 ): UseCursorPositionReturn => {
-    const hasRestoredRef = useRef(false);
+    const hasRestoredRef = useRef<boolean>(false);
 
     // Save cursor position when selection changes
     const handleSelectionChange = useCallback(

@@ -1,22 +1,22 @@
 'use client';
 
-import { createContext, ReactNode, useCallback, useMemo, useState } from 'react';
 import { useHistoryTree, usePersistence } from '@/editor/hooks';
 import {
     BlockArray,
     BlockType,
     CursorPosition,
+    deleteBlockCommand,
     HistoryNode,
+    insertBlockCommand,
+    loadEditorState,
+    moveBlockCommand,
     Path,
     RedoBranch,
     STORAGE_CONFIG,
-    deleteBlockCommand,
-    insertBlockCommand,
-    moveBlockCommand,
     toggleTodoCommand,
     updateContentCommand,
-    loadEditorState,
 } from '@/editor/lib';
+import { createContext, ReactNode, useCallback, useMemo, useState } from 'react';
 
 export type EditorContextType = {
     // State
@@ -48,7 +48,7 @@ type EditorProviderProps = Readonly<{
 
 export function EditorProvider({ children, initialDoc }: EditorProviderProps) {
     // Initialize from localStorage or use defaults
-    const persistedState = typeof window !== 'undefined' ? loadEditorState() : null;
+    const persistedState = globalThis.window === undefined ? null : loadEditorState();
 
     // Use history tree hook for document and history management
     const history = useHistoryTree(persistedState?.doc ?? initialDoc);
@@ -71,7 +71,6 @@ export function EditorProvider({ children, initialDoc }: EditorProviderProps) {
     // Action wrappers that create commands and execute them
     const updateContent = useCallback(
         (path: Path, content: string) => {
-            console.log('🎯 Action: Update Content', { path, content });
             const command = updateContentCommand(history.doc, path, content);
             history.execute(command);
         },
@@ -80,7 +79,6 @@ export function EditorProvider({ children, initialDoc }: EditorProviderProps) {
 
     const toggleTodo = useCallback(
         (path: Path) => {
-            console.log('🎯 Action: Toggle Todo', { path });
             const command = toggleTodoCommand(history.doc, path);
             history.execute(command);
         },
@@ -89,7 +87,6 @@ export function EditorProvider({ children, initialDoc }: EditorProviderProps) {
 
     const insertBlock = useCallback(
         (parentPath: Path | null, index: number, type: BlockType) => {
-            console.log('🎯 Action: Insert Block', { parentPath, index, type });
             const command = insertBlockCommand(parentPath, index, type);
             history.execute(command);
         },
@@ -98,7 +95,6 @@ export function EditorProvider({ children, initialDoc }: EditorProviderProps) {
 
     const deleteBlock = useCallback(
         (parentPath: Path | null, index: number) => {
-            console.log('🎯 Action: Delete Block', { parentPath, index });
             const command = deleteBlockCommand(history.doc, parentPath, index);
             history.execute(command);
         },
@@ -107,7 +103,6 @@ export function EditorProvider({ children, initialDoc }: EditorProviderProps) {
 
     const moveBlock = useCallback(
         (fromParentPath: Path | null, fromIndex: number, toParentPath: Path | null, toIndex: number) => {
-            console.log('🎯 Action: Move Block', { fromParentPath, fromIndex, toParentPath, toIndex });
             const command = moveBlockCommand(fromParentPath, fromIndex, toParentPath, toIndex);
             history.execute(command);
         },

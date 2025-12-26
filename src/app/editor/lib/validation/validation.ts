@@ -5,7 +5,7 @@ import { findBlockById } from '../utils';
 export type ValidationError = {
     type: 'duplicate_id' | 'invalid_block' | 'invalid_history' | 'invalid_cursor' | 'orphaned_parent' | 'schema_error';
     message: string;
-    details?: unknown;
+    details?: object;
 };
 
 export type ValidationResult = {

@@ -20,7 +20,7 @@ type BlockNodeProps = Readonly<{
  * Refactored to use extracted hooks for better separation of concerns.
  */
 export const BlockNode = ({ block, path, index, parentPath }: BlockNodeProps) => {
-    const { updateContent, toggleTodo, deleteBlock, insertBlock, moveBlock, cursorPosition, setCursorPosition } = useEditor();
+    const { updateContent, toggleTodo, deleteBlock, insertBlock, moveBlock, setCursorPosition } = useEditor();
 
     // Use extracted hooks for different concerns
     const { setRefs: dragDropRef, opacity: dragOpacity, getDropIndicatorClasses } = useBlockDragDrop(block, path, index, parentPath, moveBlock);

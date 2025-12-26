@@ -126,7 +126,7 @@ export const getCommandPreview = (command: Command): string => {
                 const preview = op.value.slice(0, 30);
                 return `Edit: "${preview}${op.value.length > 30 ? '...' : ''}"`;
             }
-            if (op.field === 'done') return op.value ? 'Complete todo' : 'Uncomplete todo';
+            if (op.field === 'done') return op.value ? 'Complete todo' : 'Uncompleted todo';
             return 'Update';
         case 'insert':
             return `Insert ${op.block.type}`;

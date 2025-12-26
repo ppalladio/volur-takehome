@@ -17,7 +17,7 @@ export const IntegrityCheckAlert = () => {
     };
 
     const handleResetAll = () => {
-        if (confirm('⚠️ Reset everything? This will delete all your data and history. This cannot be undone!')) {
+        if (confirm('  Reset everything? This will delete all your data and history. This cannot be undone!')) {
             clearEditorState();
             globalThis.window.location.reload();
         }

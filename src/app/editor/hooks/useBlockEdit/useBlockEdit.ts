@@ -28,11 +28,11 @@ export type UseBlockEditReturn = {
  * @returns Editing state and handlers
  */
 export const useBlockEdit = (block: Block, path: Path, updateContent: (path: Path, content: string) => void): UseBlockEditReturn => {
-    const [isEditing, setIsEditing] = useState(false);
+    const [isEditing, setIsEditing] = useState<boolean>(false);
     // Only store content while editing - otherwise use block.content directly
-    const [editingContent, setEditingContent] = useState('');
+    const [editingContent, setEditingContent] = useState<string>('');
     const inputRef = useRef<HTMLInputElement>(null);
-    const hasRestoredRef = useRef(false);
+    const hasRestoredRef = useRef<boolean>(false);
 
     // Use editingContent while editing, otherwise use block.content
     const localContent = isEditing ? editingContent : block.content;

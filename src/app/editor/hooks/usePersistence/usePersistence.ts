@@ -10,8 +10,8 @@ import { useEffect, useRef } from 'react';
  * @param value - The value to persist (will be JSON stringified)
  * @param debounceMs - Debounce delay in milliseconds (default: 500)
  */
-export const usePersistence = (storageKey: string, value: string, debounceMs: number = 500): void => {
-    const isLoadedRef = useRef(false);
+export const usePersistence = (storageKey: string, value: object, debounceMs: number = 500): void => {
+    const isLoadedRef = useRef<boolean>(false);
 
     // Mark as loaded after initial mount
     useEffect(() => {
